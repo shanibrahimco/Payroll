@@ -1,0 +1,7 @@
+# Allowlist: everything is ignored unless it is named below.
+# Databases, backups, bank exports, uploads, staff workbooks, .venv and .vscode stay on this computer.
+*
+!.gitignore
+!README.md
+!requirements.txt
+!sic_payroll_app.py
