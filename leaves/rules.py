@@ -8,7 +8,18 @@ from auth.sessions import approver_only_emps
 from common.constants import CREDIT_REASONS, EOBI_ONLY_TYPE
 from common.dates import fmt_date, parse_date
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import get_settings_dict, is_month_locked
+
+def clean_leave_entry(data):
+    """Check a leave entry's dates and days and put the dates in the stored format. Returns (first day, number of days)."""
+    d_from, d_to = parse_date(data.get("date_from")), parse_date(data.get("date_to"))
+    applied = parse_date(data.get("application_date")) if data.get("application_date") else date.today()
+    days = checked_number(data.get("no_of_days"), "leave_invalid")
+    if d_from is None or d_to is None or applied is None or d_to < d_from or not 0 < days <= (d_to - d_from).days + 1:
+        raise ChangeError("leave_invalid")
+    data.update(date_from=fmt_date(d_from), date_to=fmt_date(d_to), application_date=fmt_date(applied))
+    return d_from, days
 
 def decide_leave(conn, leave, decision, user, role, own_emp):
     """Leave chain: Pending -> Recommended (Reviewer) -> Approved (Approver); either may reject.

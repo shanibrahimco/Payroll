@@ -1,7 +1,7 @@
 """Sign-in, first-time set-up and sign-out."""
 
 from auth.roles import ROLE_APPROVER
-from auth.sessions import SESSION_COOKIE, SESSION_HOURS, create_session, delete_session
+from auth.sessions import SESSION_HOURS, create_session, delete_session
 from auth.users import create_user, normalise_username, try_login, user_count
 from common.constants import MIN_PASSWORD_LEN
 from common.messages import FLASH_MESSAGES
@@ -27,7 +27,7 @@ class AuthPagesMixin:
             token = self.session_token()
             if token:
                 delete_session(token)
-            return self.redirect("/login", cookie=f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
+            return self.redirect("/login", cookie=self.session_cookie("", 0))
 
         if path == "/setup":
             if user_count() > 0:
@@ -43,12 +43,11 @@ class AuthPagesMixin:
                 return self.send_html(render_auth_page(setup=True, error=error, username=username), status=400)
             create_user(username, password, role=ROLE_APPROVER)
         else:
-            outcome = try_login(username, password, self.client_address[0])
+            outcome = try_login(username, password, self.client_ip())
             if outcome == "locked":
                 return self.send_html(render_auth_page(setup=False, error=FLASH_MESSAGES["login_locked"][1], username=username), status=429)
             if outcome != "ok":
                 return self.send_html(render_auth_page(setup=False, error="Invalid username or password.", username=username), status=401)
 
         token = create_session(username)
-        cookie = f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_HOURS * 3600}"
-        return self.redirect("/", cookie=cookie)
+        return self.redirect("/", cookie=self.session_cookie(token, SESSION_HOURS * 3600))

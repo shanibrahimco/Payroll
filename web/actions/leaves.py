@@ -12,7 +12,7 @@ from common.dates import fmt_date, get_payroll_month_for_event, parse_date
 from common.errors import ChangeError
 from common.settings import log_decision
 from leaves.history_import import apply_leave_history, read_leave_history
-from leaves.rules import check_credit, check_entry, credit_is_late, decide_leave
+from leaves.rules import check_credit, check_entry, clean_leave_entry, credit_is_late, decide_leave
 from notifications.mailer import email_holiday_notice, notify_approver
 
 def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff, km_rate, now, enters_for_others):
@@ -203,7 +203,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         emp_id = data["emp_id"].strip().upper() if enters_for_others else own_emp
         if not emp_id:
             raise ChangeError("no_emp_link")
-        f_d = parse_date(data["date_from"])
+        f_d, days = clean_leave_entry(data)
         pm_target = fmt_date(get_payroll_month_for_event(f_d, cutoff))
         check_entry(conn, emp_id, pm_target)
         if data["leave_type"] not in LEAVE_TYPES:
@@ -219,6 +219,6 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
                 INSERT INTO leave_register (application_date, emp_id, leave_type, date_from, date_to, no_of_days, reason, status, payroll_month, entered_by)
                 VALUES (?,?,?,?,?,?,?,?,?,?)
             """, (data["application_date"], emp_id, data["leave_type"],
-              data["date_from"], data["date_to"], float(data["no_of_days"]), data.get("reason",""),
+              data["date_from"], data["date_to"], days, data.get("reason",""),
               status, pm_target, user))
         return "saved"

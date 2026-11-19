@@ -10,13 +10,13 @@ import config
 from auth.roles import ROLE_ACTIONS, ROLE_APPROVER, ROLE_PREPARER, ROLE_REVIEWER, ROLE_STAFF, ROLE_TABS
 from auth.sessions import approver_only_emps, delegated_portals, set_session_acting
 from auth.users import user_count
-from common.dates import parse_date, pay_month_label
+from common.dates import current_month, parse_date, pay_month_label
 from common.errors import ChangeError
 from common.messages import FLASH_MESSAGES
 from common.settings import get_settings_dict, is_month_locked
 from database import get_conn
 from leaves.history_import import build_leave_template
-from payroll.bank_files import generate_bank_files
+from payroll.bank_files import generate_bank_files, staff_left_out_of_bank_files
 from payroll.calculator import calculate_payroll, recalc_open_months
 from payroll.sheet_import import build_payroll_template
 from staff.rules import cnic_alert
@@ -45,6 +45,8 @@ class RouterMixin:
         if urlparse(self.path).path.startswith("/api/"):
             return self.handle_api("GET", urlparse(self.path))
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            return self.send_health()
         if parsed.path in ("/login", "/setup"):
             return self.handle_auth_get(parsed.path)
         real_user = self.current_user()
@@ -57,9 +59,9 @@ class RouterMixin:
         allowed_tabs = ROLE_TABS.get(role, ())
 
         qs = parse_qs(parsed.query)
-        ym = qs.get("ym", ["2026-11"])[0]
+        ym = qs.get("ym", [current_month()])[0]
         if len(ym) != 7 or not parse_date(f"{ym}-01"):
-            ym = "2026-11"
+            ym = current_month()
         tab = qs.get("tab", [allowed_tabs[0] if allowed_tabs else "account"])[0]
         pm_str = f"{ym}-01"
         flash_style, flash_text = FLASH_MESSAGES.get(qs.get("msg", [""])[0], ("", ""))
@@ -156,7 +158,11 @@ class RouterMixin:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            msg = f"<h3>Bank files generated successfully:</h3><ul><li>{ibft_p}</li><li>{ift_p}</li></ul><a href='/?tab=payroll&ym={ym}'>Back to Payroll</a>"
+            left_out = staff_left_out_of_bank_files(pm_str)
+            warning = ("<h3 style='color:#b91c1c;'>Not in the bank files: bank details are incomplete, so pay these people separately or complete their details and export again</h3><ul>"
+                       + "".join(f"<li>{html_lib.escape(r['emp_id'])} {html_lib.escape(r['employee_name'])}: Rs. {r['net_pay']:,.0f}</li>" for r in left_out)
+                       + "</ul>") if left_out else ""
+            msg = f"<h3>Bank files generated successfully:</h3><ul><li>{html_lib.escape(ibft_p)}</li><li>{html_lib.escape(ift_p)}</li></ul>{warning}<a href='/?tab=payroll&ym={ym}'>Back to Payroll</a>"
             self.wfile.write(msg.encode("utf-8"))
             return
 
@@ -287,9 +293,9 @@ class RouterMixin:
             return self.redirect("/?tab=account&msg=not_allowed")
 
         qs = parse_qs(parsed.query)
-        ym = qs.get("ym", ["2026-11"])[0]
+        ym = qs.get("ym", [current_month()])[0]
         if len(ym) != 7 or not parse_date(f"{ym}-01"):
-            ym = "2026-11"
+            ym = current_month()
         pm_str = f"{ym}-01"
         emp_param = "".join(c for c in qs.get("emp", [""])[0].upper() if c.isalnum())
         if emp_param:

@@ -49,6 +49,7 @@ def render(self, conn, is_approver, pm_str, qs, role, ym, body=""):
         return "<span class='badge b-warn'>Set staff type</span>"
 
     esc = html_lib.escape
+    safe = lambda value: esc(str(value)) if value not in (None, "") else ""  # anything typed into a form is shown as plain text
     active_staff = [s for s in staff if s["status"] != "Left" and s["staff_type"] != EOBI_ONLY_TYPE]
     missing_docs = {s["emp_id"]: missing_documents(conn, s["emp_id"], s["staff_type"]) for s in active_staff}
 
@@ -56,7 +57,7 @@ def render(self, conn, is_approver, pm_str, qs, role, ym, body=""):
         warn = cnic_alert(s["cnic_expiry"])
         if not s["cnic_expiry"]:
             return "" if s["staff_type"] == EOBI_ONLY_TYPE or s["status"] == "Left" else "<span class='note'>—</span>"
-        return f"<span class='badge b-warn'>{warn}</span>" if warn else s["cnic_expiry"]
+        return f"<span class='badge b-warn'>{esc(warn)}</span>" if warn else esc(s["cnic_expiry"])
 
     def docs_cell(s):
         if s["emp_id"] not in missing_docs:
@@ -67,15 +68,15 @@ def render(self, conn, is_approver, pm_str, qs, role, ym, body=""):
 
     rows_html = "".join(f"""
                 <tr>
-                  <td>{s['emp_id']}</td><td><strong>{s['employee_name']}</strong></td><td>{s['cnic'] or ''}</td><td>{cnic_cell(s)}</td>
-                  <td>{s['staff_type'] or ''}{f"<br><span class='note'>{s['leave_entitlement_override'] or 0:g} residual leaves, to {s['articleship_end_date'] or '?'}</span>" if s['staff_type'] == NOC_TYPE else ''}</td>
-                  <td>{'n/a' if s['staff_type'] == EOBI_ONLY_TYPE else s['date_of_joining'] or "<span class='badge b-warn'>Not entered</span>"}</td>
-                  <td>{s['eobi_registration_date'] or ''}</td><td>{s['eobi_no'] or ''}</td><td>{eobi_status(s)}</td>
-                  <td>{s['icap_reg_confirmed_date'] or ''}</td><td>{s['icap_crn'] or ''}</td>
+                  <td>{safe(s['emp_id'])}</td><td><strong>{safe(s['employee_name'])}</strong></td><td>{safe(s['cnic'])}</td><td>{cnic_cell(s)}</td>
+                  <td>{safe(s['staff_type'])}{f"<br><span class='note'>{s['leave_entitlement_override'] or 0:g} residual leaves, to {safe(s['articleship_end_date']) or '?'}</span>" if s['staff_type'] == NOC_TYPE else ''}</td>
+                  <td>{'n/a' if s['staff_type'] == EOBI_ONLY_TYPE else safe(s['date_of_joining']) or "<span class='badge b-warn'>Not entered</span>"}</td>
+                  <td>{safe(s['eobi_registration_date'])}</td><td>{safe(s['eobi_no'])}</td><td>{eobi_status(s)}</td>
+                  <td>{safe(s['icap_reg_confirmed_date'])}</td><td>{safe(s['icap_crn'])}</td>
                   <td>{esc(training_org_of(s)) if s['staff_type'] in ARTICLE_TYPES else ''}</td>
-                  <td class="num">{month_hours[s['emp_id']] or std_week_hours:g}</td><td class="num">{salary_cell(s)}</td><td>{s['bank_name'] or ''}</td>
-                  <td>{s['bank_account_iban'] or ''}</td><td class="num">{s['opening_leaves_cumulative']}</td>
-                  <td class="num">{s['opening_withheld_probation']:,.0f}</td><td>{s['status']}</td><td>{docs_cell(s)}</td>
+                  <td class="num">{month_hours[s['emp_id']] or std_week_hours:g}</td><td class="num">{salary_cell(s)}</td><td>{safe(s['bank_name'])}</td>
+                  <td>{safe(s['bank_account_iban'])}</td><td class="num">{s['opening_leaves_cumulative']}</td>
+                  <td class="num">{s['opening_withheld_probation']:,.0f}</td><td>{safe(s['status'])}</td><td>{docs_cell(s)}</td>
                 </tr>""" for s in staff)
 
     # CNIC alerts, documents of one staff member, and (approver) which documents are required
@@ -86,7 +87,7 @@ def render(self, conn, is_approver, pm_str, qs, role, ym, body=""):
         alerts_panel = f"""
             <div class="panel" style="border-left:4px solid #dc2626;">
               <h3>CNIC Alerts</h3>
-              {"".join(f"<p class='note' style='margin:2px 0;'><span class='badge b-warn'>{esc(w)}</span> {s['emp_id']} <b>{esc(s['employee_name'])}</b> ({s['cnic'] or 'no CNIC no.'}) — obtain the renewed CNIC and upload it below.</p>" for s, w in alerts)}
+              {"".join(f"<p class='note' style='margin:2px 0;'><span class='badge b-warn'>{esc(w)}</span> {s['emp_id']} <b>{esc(s['employee_name'])}</b> ({safe(s['cnic']) or 'no CNIC no.'}) — obtain the renewed CNIC and upload it below.</p>" for s, w in alerts)}
               {f"<p class='note' style='margin:6px 0 0 0;'>CNIC expiry date not entered: {esc(', '.join(s['emp_id'] + ' ' + s['employee_name'] for s in no_cnic_date))}.</p>" if no_cnic_date else ""}
             </div>"""
     doc_types_all = conn.execute("SELECT * FROM doc_types ORDER BY active DESC, mandatory DESC, name").fetchall()
@@ -113,8 +114,8 @@ def render(self, conn, is_approver, pm_str, qs, role, ym, body=""):
                     <button class="btn" type="submit">Upload</button>
                   </form>"""
         docs_panel_inner = f"""
-                  <p class="note"><b>{sel} {esc(sel_staff['employee_name'])}</b> — CNIC {sel_staff['cnic'] or 'not entered'},
-                    expiry {sel_staff['cnic_expiry'] or 'not entered'}.
+                  <p class="note"><b>{sel} {esc(sel_staff['employee_name'])}</b> — CNIC {safe(sel_staff['cnic']) or 'not entered'},
+                    expiry {safe(sel_staff['cnic_expiry']) or 'not entered'}.
                     {f"<span class='badge b-warn'>Missing: {esc(', '.join(miss))}</span>" if miss else "<span class='badge b-ok'>All mandatory documents on file</span>"}</p>
                   {upload_form}
                   <table><thead><tr><th>Document</th><th>File</th><th>Expiry</th><th>Uploaded</th><th></th></tr></thead>

@@ -51,8 +51,8 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
 
     rows_html = "".join(f"""
                 <tr>
-                  <td>{l['application_date']}</td><td>{l['emp_id']}</td><td>{l['employee_name']}</td>
-                  <td>{l['leave_type']}</td><td>{l['date_from']}</td><td>{l['date_to']}</td>
+                  <td>{html_lib.escape(l['application_date'] or '')}</td><td>{l['emp_id']}</td><td>{html_lib.escape(l['employee_name'] or '')}</td>
+                  <td>{html_lib.escape(l['leave_type'] or '')}</td><td>{html_lib.escape(l['date_from'] or '')}</td><td>{html_lib.escape(l['date_to'] or '')}</td>
                   <td class="num">{l['no_of_days']}</td><td>{leave_status_cell(l)}</td><td>{l['payroll_month']}</td><td>{html_lib.escape(l['reason'] or '')}{f"<br><span class='note'>filed by {html_lib.escape(l['entered_by'])}</span>" if l['entered_by'] and ' for ' in l['entered_by'] else ''}</td>
                   <td>{leave_action(l)}</td>
                 </tr>""" for l in lvs)
@@ -98,7 +98,7 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
             bal_cell = f"<span class='badge {'b-ok' if r['leave_flag'] == 'OK' else 'b-warn'}'>{r['leave_balance']:g} {r['leave_flag']}</span>"
         return f"""
                 <tr>
-                  <td>{r['emp_id']}</td><td><strong>{r['employee_name']}</strong></td><td>{r['staff_type'] or ''}</td>
+                  <td>{r['emp_id']}</td><td><strong>{html_lib.escape(r['employee_name'] or '')}</strong></td><td>{html_lib.escape(r['staff_type'] or '')}</td>
                   <td class="num">{opening:g}</td><td class="num">{r['leaves_cumulative'] - opening:g}</td>
                   <td class="num">{r['leaves_this_month']:g}</td><td class="num">{r['leaves_this_year']:g}</td>
                   <td class="num"><strong>{r['leaves_cumulative']:g}</strong></td>

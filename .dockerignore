@@ -1,0 +1,21 @@
+# Allowlist: only the code below goes into the image. Databases, backups, uploads, exports and settings never do.
+*
+!app.py
+!config.py
+!database.py
+!requirements.txt
+!api/
+!auth/
+!attendance/
+!common/
+!deploy/backup.py
+!leaves/
+!loans/
+!notifications/
+!payroll/
+!staff/
+!timesheets/
+!travel/
+!web/
+**/__pycache__
+**/*.pyc

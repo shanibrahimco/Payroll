@@ -8,6 +8,7 @@ import config
 from auth.roles import ROLE_REVIEWER
 from common.dates import fmt_date, get_payroll_month_for_event, parse_date
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import log_decision
 from leaves.rules import check_entry
 from notifications.mailer import notify_approver
@@ -18,8 +19,8 @@ from travel.fuel import fetch_fuel_prices, km_rate_from_price, petrol_price_on, 
 def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff, km_rate, now, enters_for_others):
     if path == "/set_travel_rate":
         # the formula: Rs. <rate> per km when petrol (Premier Euro 5) costs Rs. <base_price> a litre
-        rate = float(data.get("rate") or 0)
-        base_price = float(data.get("base_price") or cfg.get("travel_rate_base_price", 400))
+        rate = checked_number(data.get("rate"), "rate_invalid")
+        base_price = checked_number(data.get("base_price"), "rate_invalid", float(cfg.get("travel_rate_base_price", 400)))
         if rate <= 0 or base_price <= 0:
             raise ChangeError("rate_invalid")
         old = f"Rs. {float(cfg.get('travel_rate_base_km', 17)):g}/km at Rs. {float(cfg.get('travel_rate_base_price', 400)):g}/litre"
@@ -32,7 +33,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
     if path == "/set_rate_uplift":
         # Reviewer: raise the formula rate by at most 10% (0 = back to the formula), from today, with a written reason.
         # Approver: any uplift, from any date.
-        pct = round(float(data.get("pct") or 0), 2)
+        pct = round(checked_number(data.get("pct"), "uplift_too_high"), 2)
         reason = data.get("reason", "").strip()[:300]
         start = date.today() if role == ROLE_REVIEWER else (parse_date(data.get("effective_from")) or date.today())
         limit = float(cfg.get("travel_rate_max_uplift_pct", 10)) if role == ROLE_REVIEWER else 100.0
@@ -64,7 +65,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         return "fuel_fetched"
 
     if path == "/add_fuel_price":
-        d, price = parse_date(data.get("effective_date")), float(data.get("price") or 0)
+        d, price = parse_date(data.get("effective_date")), checked_number(data.get("price"), "fuel_price_invalid")
         if d is None or price <= 0 or d > date.today():
             raise ChangeError("fuel_price_invalid")
         conn.execute("INSERT OR REPLACE INTO fuel_prices (effective_date, price, source, recorded_by, recorded_at) VALUES (?,?,'Manual',?,?)",
@@ -85,10 +86,10 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         mode = data.get("travel_mode") or OWN_VEHICLE
         if mode not in TRAVEL_MODES:
             raise ChangeError("bad_input")
-        kms = float(data.get("kms") or 0)
-        park = float(data.get("parking") or 0)
-        other = float(data.get("other_charges") or 0)
-        fare = float(data.get("fare") or 0)
+        kms = checked_number(data.get("kms"))
+        park = checked_number(data.get("parking"))
+        other = checked_number(data.get("other_charges"))
+        fare = checked_number(data.get("fare"))
         if mode == OWN_VEHICLE:  # kms x the petrol-linked rate on the day travelled
             km_rate, fare = travel_rate_on(conn, c_d, cfg), 0.0
             tot = round(kms * km_rate + park + other, 0)
@@ -113,7 +114,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
                 INSERT INTO travel_claims (claim_date, emp_id, client_name, venue_particular, kms, rate_per_km, parking, other_charges, total_amount,
                                            payroll_month, status, submitted_by, travel_mode, fare, receipt_file, receipt_name, receipt_type)
                 VALUES (?,?,?,?,?,?,?,?,?,?,'Submitted',?,?,?,?,?,?)
-            """, (data["claim_date"], emp_id, data.get("client_name",""),
+            """, (fmt_date(c_d), emp_id, data.get("client_name",""),
               data.get("venue_particular",""), kms, km_rate, park, other, tot, pm_target, user, mode, fare, *receipt_cols))
         return "claim_submitted"
 

@@ -8,6 +8,7 @@ from auth.roles import ROLE_APPROVER
 from common.constants import ARTICLE_TYPES, EOBI_ONLY_TYPE, NOC_TYPE
 from common.dates import add_months, first_of_month, fmt_date, parse_date, pay_month_label
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import is_month_locked
 from loans.rules import loan_policy
 from staff.documents import delete_request_documents
@@ -56,7 +57,9 @@ def training_org_of(staff):
     return staff["training_org"] or config.TRAINING_ORGS[0]
 
 def normalise_hours(value, cfg):
-    hours = float(value)
+    hours = checked_number(value, "hours_invalid")
+    if hours < 0:
+        raise ChangeError("hours_invalid")
     return None if hours >= float(cfg.get("standard_weekly_hours", 45)) else hours
 
 def build_change(conn, kind, data, pm_str, cfg):
@@ -67,7 +70,7 @@ def build_change(conn, kind, data, pm_str, cfg):
     if kind == "add_staff":
         eobi_only = data.get("staff_type") == EOBI_ONLY_TYPE
         # Employees need a joining date and salary; EOBI-only people need just their EOBI registration date
-        if (not emp_id or not data.get("employee_name", "").strip()
+        if (not emp_id.isalnum() or not data.get("employee_name", "").strip()
                 or (not eobi_only and (not data.get("monthly_salary") or not data.get("date_of_joining")))
                 or (eobi_only and not data.get("eobi_registration_date"))):
             raise ChangeError("bad_input")
@@ -78,7 +81,9 @@ def build_change(conn, kind, data, pm_str, cfg):
             val = data.get(col, "").strip()
             if val:
                 fields[col] = val
-        fields["monthly_salary"] = 0.0 if eobi_only else float(fields["monthly_salary"])
+        fields["monthly_salary"] = 0.0 if eobi_only else checked_number(fields["monthly_salary"])
+        if fields["monthly_salary"] < 0:
+            raise ChangeError("bad_input")
         if data.get("staff_type") in ARTICLE_TYPES:
             fields["training_org"] = fields.get("training_org", config.TRAINING_ORGS[0])
             if fields["training_org"] not in config.TRAINING_ORGS:
@@ -88,7 +93,7 @@ def build_change(conn, kind, data, pm_str, cfg):
         if data.get("staff_type") == NOC_TYPE:  # a transferred articleship: only what remains of the leaves and the period
             if not parse_date(fields.get("articleship_end_date")) or "leave_entitlement_override" not in fields:
                 raise ChangeError("noc_needs_residual")
-            fields["leave_entitlement_override"] = float(fields["leave_entitlement_override"])
+            fields["leave_entitlement_override"] = checked_number(fields["leave_entitlement_override"])
         else:
             fields.pop("leave_entitlement_override", None)
             fields.pop("articleship_end_date", None)
@@ -114,7 +119,9 @@ def build_change(conn, kind, data, pm_str, cfg):
                 if (data.get("staff_type") or staff["staff_type"]) not in ARTICLE_TYPES:
                     continue  # only ICAP and NOC students are registered with a training organisation
             if col in ("monthly_salary", "leave_entitlement_override"):
-                val = float(val)
+                val = checked_number(val)
+                if val < 0:
+                    raise ChangeError("bad_input")
             elif col == "weekly_hours":
                 val = normalise_hours(val, cfg)
             if val != staff[col]:
@@ -128,7 +135,7 @@ def build_change(conn, kind, data, pm_str, cfg):
     if kind == "add_input":
         if is_month_locked(conn, pm_str):
             raise ChangeError("locked")
-        values = {c: float(data.get(c) or 0) for c in INPUT_LABELS}
+        values = {c: checked_number(data.get(c)) for c in INPUT_LABELS}
         existing = conn.execute("SELECT 1 FROM monthly_inputs WHERE payroll_month = ? AND emp_id = ?", (pm_str, emp_id)).fetchone()
         parts = [f"{INPUT_LABELS[c]} {v:g}" if c == "leave_days_waived" else f"{INPUT_LABELS[c]} Rs. {v:,.0f}"
                  for c, v in values.items() if v]
@@ -142,8 +149,10 @@ def build_change(conn, kind, data, pm_str, cfg):
         if not ref or not given or not data.get("amount"):
             raise ChangeError("bad_input")
         loan_type = data.get("loan_type") if data.get("loan_type") in ("Loan", "Advance") else "Loan"
-        amount = float(data["amount"])
-        instalment = float(data.get("monthly_instalment") or 0)
+        amount = checked_number(data["amount"])
+        instalment = checked_number(data.get("monthly_instalment"))
+        if amount <= 0 or instalment < 0:
+            raise ChangeError("bad_input")
         first_m = fmt_date(add_months(first_of_month(given), 1))
         existing = conn.execute("SELECT 1 FROM advances_loans WHERE loan_ref = ?", (ref,)).fetchone()
         if loan_type == "Loan" and (instalment <= 0 or -(-amount // instalment) > int(float(cfg.get("loan_max_instalments", 20)))):

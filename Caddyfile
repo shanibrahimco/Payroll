@@ -1,0 +1,20 @@
+# HTTPS front door. The domain comes from the .env file, and the certificate is obtained and renewed automatically.
+{$PAYROLL_DOMAIN} {
+	encode gzip
+
+	request_body {
+		max_size 50MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	respond /health 404
+
+	reverse_proxy {$PAYROLL_UPSTREAM:payroll:8080}
+}

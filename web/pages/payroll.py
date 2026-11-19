@@ -69,7 +69,7 @@ def render(self, conn, is_approver, pending_count, pm_str, role, ym, body=""):
             """
     rows_html = ""
     for r in lines:
-        chk_badge = f"<span class='badge b-warn'>{r['validation_checks']}</span>" if r["validation_checks"] else "<span class='badge b-ok'>OK</span>"
+        chk_badge = f"<span class='badge b-warn'>{html_lib.escape(r['validation_checks'])}</span>" if r["validation_checks"] else "<span class='badge b-ok'>OK</span>"
         if r["leave_balance"] is None:
             lv_bal = "—"
         else:
@@ -77,8 +77,8 @@ def render(self, conn, is_approver, pending_count, pm_str, role, ym, body=""):
         rows_html += f"""
                 <tr>
                   <td>{r['emp_id']}</td>
-                  <td><strong>{r['employee_name']}</strong></td>
-                  <td>{r['staff_type'] or '<em>(unset)</em>'}</td>
+                  <td><strong>{html_lib.escape(r['employee_name'] or '')}</strong></td>
+                  <td>{html_lib.escape(r['staff_type']) if r['staff_type'] else '<em>(unset)</em>'}</td>
                   <td class="num">{r['gross_earned']:,.0f}</td>
                   <td class="num">{r['travelling_allowance']:,.0f}</td>
                   <td class="num">{r['probation_salary_released']:,.0f}</td>
@@ -120,7 +120,7 @@ def render(self, conn, is_approver, pending_count, pm_str, role, ym, body=""):
                 f"<button class='btn btn-ok' type='submit'>Release Rs. {outstanding:,.0f} in {pay_month_label(pm_str)}</button></form>")
 
     hold_rows = "".join(f"""
-                <tr><td>{h['emp_id']}</td><td><strong>{h['employee_name']}</strong></td><td>{pay_month_label(h['payroll_month'])}</td>
+                <tr><td>{h['emp_id']}</td><td><strong>{html_lib.escape(h['employee_name'] or '')}</strong></td><td>{pay_month_label(h['payroll_month'])}</td>
                   <td class="num">{h['held']:,.0f}</td><td class="num">{h['released']:,.0f}</td><td>{hold_action(h)}</td></tr>""" for h in holds)
     holds_panel = f"""
             <div class="panel">
@@ -198,8 +198,8 @@ def render(self, conn, is_approver, pending_count, pm_str, role, ym, body=""):
                       "<button class='btn btn-danger' type='submit' name='decision' value='Forfeited'>Forfeit</button></form>")
         elif leaving:
             action = "<span class='note'>The approver settles this in a Draft month</span>"
-        held_rows += (f"<tr><td>{s['emp_id']}</td><td><strong>{html_lib.escape(s['employee_name'])}</strong></td><td>{s['staff_type']}</td>"
-                      f"<td>{s['status']}{' — leaving ' + s['leaving_date'] if s['leaving_date'] else ''}</td><td>{why}</td>"
+        held_rows += (f"<tr><td>{s['emp_id']}</td><td><strong>{html_lib.escape(s['employee_name'])}</strong></td><td>{html_lib.escape(s['staff_type'] or '')}</td>"
+                      f"<td>{html_lib.escape(s['status'] or '')}{' — leaving ' + html_lib.escape(s['leaving_date']) if s['leaving_date'] else ''}</td><td>{why}</td>"
                       f"<td class='num'><strong>{bal:,.0f}</strong></td><td>{action}</td></tr>")
     held_panel = f"""
             <div class="panel">

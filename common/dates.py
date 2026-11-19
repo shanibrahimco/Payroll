@@ -4,6 +4,10 @@ from datetime import date
 from datetime import datetime
 import calendar
 
+def current_month():
+    """This calendar month as YYYY-MM: the month the app opens on."""
+    return date.today().strftime("%Y-%m")
+
 def parse_date(val):
     if val is None or val == "":
         return None

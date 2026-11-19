@@ -4,8 +4,9 @@ from datetime import date
 import math
 
 from common.constants import STAFF_LEAVE_TYPES
-from common.dates import fmt_date, parse_date
+from common.dates import parse_date
 from common.errors import ChangeError
+from leaves.rules import clean_leave_entry
 from loans.rules import loan_policy
 from staff.rules import cnic_alert
 
@@ -32,14 +33,10 @@ def api_check_numbers(fields, *names):
 
 def api_clean_leave(fields):
     """Validate a leave application from the app and put its dates in the stored format."""
-    d_from, d_to = parse_date(fields.get("date_from")), parse_date(fields.get("date_to"))
-    applied = parse_date(fields.get("application_date")) if fields.get("application_date") else date.today()
-    api_check_numbers(fields, "no_of_days")
-    days = float(fields.get("no_of_days") or 0)
-    if (d_from is None or d_to is None or applied is None or d_to < d_from or fields.get("leave_type") not in STAFF_LEAVE_TYPES
-            or not 0 < days <= (d_to - d_from).days + 1):
+    if fields.get("leave_type") not in STAFF_LEAVE_TYPES:
         raise ChangeError("bad_input")
-    fields.update(date_from=fmt_date(d_from), date_to=fmt_date(d_to), application_date=fmt_date(applied), reason=fields.get("reason", "")[:500])
+    clean_leave_entry(fields)
+    fields["reason"] = fields.get("reason", "")[:500]
 
 def api_month(qs):
     """(YYYY-MM, YYYY-MM-01) from ?ym=, defaulting to the current month."""

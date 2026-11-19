@@ -4,7 +4,6 @@ Run from the project folder:  python tests/test_app.py
 """
 import io, json, os, shutil, sqlite3, sys, tempfile, threading, urllib.error, urllib.parse, urllib.request, uuid
 from datetime import date, datetime, timedelta
-from http.server import HTTPServer
 from types import SimpleNamespace
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,10 +17,10 @@ from auth.users import LOGIN_FAILURES, LOGIN_WINDOW_SECONDS, create_user
 from common.constants import ABSENCE_LEAVE_TYPE
 from database import get_conn, init_db
 from payroll.calculator import calculate_payroll
-from web.handler import PayrollHandler
+from web.handler import PayrollHandler, PayrollServer
 
 app = SimpleNamespace(init_db=init_db, create_user=create_user, ROLE_STAFF=ROLE_STAFF, ROLE_PREPARER=ROLE_PREPARER, ROLE_REVIEWER=ROLE_REVIEWER,
-                      ROLE_APPROVER=ROLE_APPROVER, HTTPServer=HTTPServer, PayrollHandler=PayrollHandler, get_conn=get_conn, store_attendance=store_attendance,
+                      ROLE_APPROVER=ROLE_APPROVER, HTTPServer=PayrollServer, PayrollHandler=PayrollHandler, get_conn=get_conn, store_attendance=store_attendance,
                       attendance_summary=attendance_summary, calculate_payroll=calculate_payroll, LOGIN_FAILURES=LOGIN_FAILURES,
                       LOGIN_WINDOW_SECONDS=LOGIN_WINDOW_SECONDS, datetime=datetime, ABSENCE_LEAVE_TYPE=ABSENCE_LEAVE_TYPE, distance_metres=distance_metres)
 

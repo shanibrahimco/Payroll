@@ -124,7 +124,7 @@ class ApiMixin:
         if not isinstance(username, str) or not isinstance(password, str):
             raise ChangeError("bad_input")
         username = normalise_username(username.strip())
-        outcome = try_login(username, password, self.client_address[0])
+        outcome = try_login(username, password, self.client_ip())
         if outcome != "ok":
             raise ChangeError("login_locked" if outcome == "locked" else "login_invalid")
         account = get_user(username)

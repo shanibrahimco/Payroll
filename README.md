@@ -20,7 +20,8 @@
 | `common/` | Dates, messages, settings and fixed values used everywhere |
 | `web/` | Web app: `router.py`, one file per tab in `pages/`, form handling in `actions/` |
 | `api/` | Mobile app API (`/api/*`) |
-| `tests/` | Automated checks: `python tests/test_app.py` (runs on a temporary copy of the data) |
+| `tests/` | Automated checks: `python tests/test_app.py` and `python tests/test_deployment.py` (run on temporary data) |
+| `deploy/`, `Dockerfile`, `docker-compose.yml`, `Caddyfile` | Server deployment and backups: see [DEPLOYMENT.md](DEPLOYMENT.md) |
 
 ## Companies
 Each company has its own database, users, exports folder and port. One firm's staff and payroll are never visible to the other.

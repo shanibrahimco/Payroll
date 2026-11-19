@@ -13,6 +13,7 @@ from auth.sessions import approver_only_emps
 from common.constants import ABSENCE_LEAVE_TYPE, MAX_UPLOAD_BYTES, STAFF_LEAVE_TYPES, WEEKDAY_NAMES
 from common.dates import first_of_month, fmt_date, get_payroll_month_for_event, parse_date, pay_month_label
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import is_month_locked, log_decision
 from leaves.rules import check_entry
 from payroll.calculator import weekly_hours_for
@@ -147,7 +148,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
             raise ChangeError("hours_own")
         if is_month_locked(conn, pm_str):
             raise ChangeError("locked")
-        entered = float(data.get("weekly_hours") or 0)
+        entered = checked_number(data.get("weekly_hours"), "hours_invalid")
         if entered <= 0:
             raise ChangeError("hours_invalid")
         before = weekly_hours_for(conn, staff, pm_str)

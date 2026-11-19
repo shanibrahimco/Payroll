@@ -23,6 +23,7 @@ def generate_bank_files(payroll_month_str, out_dir=None):
         JOIN staff s ON p.emp_id = s.emp_id
         LEFT JOIN banks b ON s.bank_name = b.bank_name
         WHERE p.payroll_month = ? AND p.payment_mode = 'IBFT' AND p.net_pay > 0
+          AND COALESCE(TRIM(s.bank_account_iban), '') != '' AND COALESCE(TRIM(b.ibft_bank_code), '') != ''
         ORDER BY p.emp_id
     """, (pm_str,)).fetchall()
 
@@ -34,6 +35,7 @@ def generate_bank_files(payroll_month_str, out_dir=None):
         FROM payroll_lines p
         JOIN staff s ON p.emp_id = s.emp_id
         WHERE p.payroll_month = ? AND p.payment_mode = 'Meezan IFT' AND p.net_pay > 0
+          AND COALESCE(TRIM(s.bank_account_iban), '') != ''
         ORDER BY p.emp_id
     """, (pm_str,)).fetchall()
 
@@ -42,6 +44,21 @@ def generate_bank_files(payroll_month_str, out_dir=None):
 
     conn.close()
     return ibft_path, ift_path
+
+def staff_left_out_of_bank_files(payroll_month_str):
+    """People due net pay this month who can't go in a bank file because their bank details are incomplete."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT p.emp_id, p.employee_name, p.net_pay FROM payroll_lines p
+        JOIN staff s ON p.emp_id = s.emp_id
+        LEFT JOIN banks b ON s.bank_name = b.bank_name
+        WHERE p.payroll_month = ? AND p.net_pay > 0 AND p.payment_mode IN ('IBFT', 'Meezan IFT')
+          AND (COALESCE(TRIM(s.bank_account_iban), '') = ''
+               OR (p.payment_mode = 'IBFT' AND COALESCE(TRIM(b.ibft_bank_code), '') = ''))
+        ORDER BY p.emp_id
+    """, (fmt_date(first_of_month(parse_date(payroll_month_str))),)).fetchall()
+    conn.close()
+    return rows
 
 def write_ibft_file(path, items):
     """IBFT upload file; items = [(row with employee_name / bank_account_iban / account_title / ibft_bank_code, amount, reference)]."""

@@ -546,6 +546,13 @@ def get_conn():
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+def set_public_url(url):
+    """Record the address staff open, so login emails link to the live site."""
+    conn = get_conn()
+    conn.execute("UPDATE settings SET value = ? WHERE key = 'app_url'", (url,))
+    conn.commit()
+    conn.close()
+
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA_SQL)

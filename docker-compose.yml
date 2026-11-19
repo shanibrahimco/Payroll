@@ -1,0 +1,71 @@
+# Starts the payroll app, its HTTPS front door and the daily backup. Settings come from the .env file beside this one.
+services:
+  payroll:
+    build: .
+    image: payroll-app
+    restart: unless-stopped
+    environment:
+      PAYROLL_PUBLIC_URL: https://${PAYROLL_DOMAIN:?Set PAYROLL_DOMAIN in the .env file}
+      PAYROLL_BEHIND_HTTPS_PROXY: "1"
+    volumes:
+      - ${PAYROLL_DATA_PATH:-/srv/payroll/data}:/data
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  backup:
+    image: payroll-app
+    restart: unless-stopped
+    command: ["python", "deploy/backup.py"]
+    environment:
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ${PAYROLL_DATA_PATH:-/srv/payroll/data}:/data
+      - ${PAYROLL_BACKUP_PATH:-/srv/payroll/backups}:/backups
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+    depends_on:
+      payroll:
+        condition: service_healthy
+    logging: *logging
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    environment:
+      PAYROLL_DOMAIN: ${PAYROLL_DOMAIN:?Set PAYROLL_DOMAIN in the .env file}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      payroll:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

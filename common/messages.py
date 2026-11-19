@@ -191,6 +191,7 @@ FLASH_MESSAGES = {  # key -> (style, text)
     "bad_location": ("warn", "Your location could not be read. Turn on location and try again."),
     "payslip_not_ready": ("warn", "The payslip for that month is available once the payroll has been approved."),
     "login_locked": ("warn", "Too many wrong passwords. Please wait 15 minutes and try again."),
+    "leave_invalid": ("warn", "Check the leave dates and days: the end date can't be before the start date, and the days must be more than 0 and fit within those dates."),
     "absence_own": ("warn", "You can't file or record your own absence; the approver decides it."),
     "punched_in_review": ("warn", "Checked in. You are not at an approved location, so the reviewer will check this attendance."),
     "location_need_note": ("warn", "You are not at an approved location. Enter the client or place you are at, then check in again."),

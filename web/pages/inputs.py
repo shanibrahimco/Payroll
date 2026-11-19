@@ -1,14 +1,16 @@
 """The inputs tab of the web app."""
 
+import html as html_lib
+
 from auth.roles import ROLE_PREPARER
 
 def render(self, conn, is_approver, pm_str, role, ym, body=""):
     mis = conn.execute("SELECT m.*, s.employee_name FROM monthly_inputs m JOIN staff s ON m.emp_id=s.emp_id WHERE m.payroll_month=? ORDER BY m.emp_id", (pm_str,)).fetchall()
     rows_html = "".join(f"""
                 <tr>
-                  <td>{m['emp_id']}</td><td>{m['employee_name']}</td><td class="num">{m['bonus']:,.0f}</td>
+                  <td>{m['emp_id']}</td><td>{html_lib.escape(m['employee_name'] or '')}</td><td class="num">{m['bonus']:,.0f}</td>
                   <td class="num">{m['arrears_other']:,.0f}</td>
-                  <td class="num">{m['partial_days_client_deduction']:,.0f}</td><td class="num">{m['leave_days_waived']}</td><td>{m['note'] or ''}</td>
+                  <td class="num">{m['partial_days_client_deduction']:,.0f}</td><td class="num">{m['leave_days_waived']}</td><td>{html_lib.escape(m['note'] or '')}</td>
                 </tr>""" for m in mis)
     body = f"""
             <div class="panel">

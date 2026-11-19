@@ -76,9 +76,9 @@ def render(self, approver_only, cannot_decide, conn, is_staff, own_emp, pm_str, 
                                              WHERE status = 'Active' AND COALESCE(staff_type, '') NOT IN ('ICAP Article', ?, ?) ORDER BY emp_id""",
                                   (NOC_TYPE, EOBI_ONLY_TYPE)).fetchall()
             enabled = [o for o in others if o["timesheet_from"]]
-            emp_opts = "".join(f"<option value='{o['emp_id']}'>{o['emp_id']} — {esc(o['employee_name'])} ({o['staff_type']})</option>" for o in others)
+            emp_opts = "".join(f"<option value='{o['emp_id']}'>{o['emp_id']} — {esc(o['employee_name'])} ({esc(o['staff_type'] or '')})</option>" for o in others)
             enabled_rows = "".join(
-                f"<tr><td>{o['emp_id']}</td><td>{esc(o['employee_name'])}</td><td>{o['staff_type']}</td><td>from {pay_month_label(o['timesheet_from'])}</td>"
+                f"<tr><td>{o['emp_id']}</td><td>{esc(o['employee_name'])}</td><td>{esc(o['staff_type'] or '')}</td><td>from {pay_month_label(o['timesheet_from'])}</td>"
                 f"<td><form method='POST' action='/set_ts_access?ym={ym}'><input type='hidden' name='emp_id' value='{o['emp_id']}'>"
                 f"<input type='hidden' name='enable' value='0'><button class='btn btn-danger' type='submit'>No Longer Required</button></form></td></tr>"
                 for o in enabled)

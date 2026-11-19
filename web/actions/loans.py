@@ -7,6 +7,7 @@ from auth.roles import ROLE_REVIEWER
 from auth.sessions import approver_only_emps
 from common.constants import EOBI_ONLY_TYPE
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import log_decision
 from loans.rules import approve_loan_application, loan_policy
 from notifications.mailer import notify_approver
@@ -20,8 +21,8 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         if staff is None or staff["status"] != "Active" or staff["staff_type"] == EOBI_ONLY_TYPE:
             raise ChangeError("not_employee")
         loan_type = "Advance" if data.get("loan_type") == "Advance" else "Loan"
-        amount = round(float(data.get("amount") or 0), 0)
-        instalments = 1 if loan_type == "Advance" else int(float(data.get("instalments") or 0))
+        amount = round(checked_number(data.get("amount"), "loan_invalid"), 0)
+        instalments = 1 if loan_type == "Advance" else int(checked_number(data.get("instalments"), "loan_invalid"))
         purpose = data.get("purpose", "").strip()[:200]
         if amount <= 0 or not purpose or instalments < 1:
             raise ChangeError("loan_invalid")
@@ -87,7 +88,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
                          (user, now, note, la["id"]))
             log_decision(conn, "add_loan", la["emp_id"], None, {"application": la["id"]}, f"Application #{la['id']} rejected — {desc}", user)
             return "loan_rejected"
-        amount = round(float(data.get("approved_amount") or la["amount"]), 0)
+        amount = round(checked_number(data.get("approved_amount"), "loan_bad_amount", la["amount"]), 0)
         if not 0 < amount <= la["amount"]:
             raise ChangeError("loan_bad_amount")
         ref, instalment = approve_loan_application(conn, la, amount, user, now)

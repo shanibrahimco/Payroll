@@ -2,7 +2,9 @@
 
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs
+import sqlite3
 
+import config
 from auth.roles import ROLE_STAFF
 from auth.sessions import SESSION_COOKIE, get_session_user, set_session_acting
 from auth.users import get_user
@@ -27,6 +29,34 @@ class HandlerBase:
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(html.encode("utf-8"))
+
+    def send_health(self):
+        """For Docker: 200 while the app can reach its database. It shows no business data."""
+        try:
+            conn = get_conn()
+            conn.execute("SELECT 1").fetchone()
+            conn.close()
+            status, body = 200, b'{"status":"ok"}'
+        except sqlite3.Error:
+            status, body = 503, b'{"status":"unavailable"}'
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def client_ip(self):
+        """The visitor's address. Behind the HTTPS proxy it is the last address the proxy added; anything earlier could be faked."""
+        if config.BEHIND_HTTPS_PROXY:
+            forwarded = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
+            if forwarded:
+                return forwarded
+        return self.client_address[0]
+
+    def session_cookie(self, value, max_age):
+        secure = "; Secure" if config.BEHIND_HTTPS_PROXY else ""  # sent over HTTPS only once the site is on HTTPS
+        return f"{SESSION_COOKIE}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}"
 
     def session_token(self):
         cookie = SimpleCookie(self.headers.get("Cookie", ""))

@@ -33,5 +33,13 @@
 !web/**
 !tests/
 !tests/**
+!deploy/
+!deploy/**
+!Dockerfile
+!docker-compose.yml
+!Caddyfile
+!.dockerignore
+!.env.example
+!DEPLOYMENT.md
 __pycache__/
 *.pyc

@@ -12,6 +12,7 @@ from auth.sessions import approver_only_emps
 from common.constants import ARTICLE_TYPES, MAX_UPLOAD_BYTES, SCAN_TYPES, STUDY_LEAVE_TYPE, TS_CODE_FIELDS, TS_DAY_TYPES, TS_TEXT_FIELDS
 from common.dates import first_of_month, fmt_date, month_days, parse_date
 from common.errors import ChangeError
+from common.numbers import checked_number
 from common.settings import is_month_locked
 
 def default_day_type(d, holidays):
@@ -87,7 +88,7 @@ def save_timesheet(conn, emp_id, pm_str, data, files, submit, user, cfg):
 
     if mode == "Scanned":
         for col in ("total_hours", "leave_days", "study_days"):
-            fields[col] = float(data.get(col) or 0)
+            fields[col] = checked_number(data.get(col))
             if fields[col] < 0:
                 raise ChangeError("bad_input")
         upload = files.get("scan")
@@ -123,7 +124,7 @@ def save_timesheet(conn, emp_id, pm_str, data, files, submit, user, cfg):
                 day_type = default_day_type(d, holidays)
             if (day_type == "Public Holiday" and fmt_date(d) not in holidays) or (day_type == "Weekend" and d.weekday() < 5):
                 raise ChangeError("ts_bad_day")  # holidays come only from the reviewer's gazetted list
-            hours = float(data.get(f"hours_{k}") or 0) if day_type == "Work" else 0.0
+            hours = checked_number(data.get(f"hours_{k}"), "ts_bad_hours") if day_type == "Work" else 0.0
             if not 0 <= hours <= 24:
                 raise ChangeError("ts_bad_hours")
             texts = {c: data.get(f"{c}_{k}", "").strip()[:200] for c in TS_TEXT_FIELDS} if day_type == "Work" else {c: "" for c in TS_TEXT_FIELDS}
