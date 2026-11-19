@@ -9,7 +9,7 @@ from common.constants import EOBI_ONLY_TYPE
 from common.errors import ChangeError
 from common.numbers import checked_number
 from common.settings import log_decision
-from loans.rules import approve_loan_application, loan_policy
+from loans.rules import LUMP_SUM, approve_loan_application, loan_policy, lump_sum_date, record_repayment
 from notifications.mailer import notify_approver
 from payroll.bank_files import generate_loan_bank_files
 
@@ -21,8 +21,10 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         if staff is None or staff["status"] != "Active" or staff["staff_type"] == EOBI_ONLY_TYPE:
             raise ChangeError("not_employee")
         loan_type = "Advance" if data.get("loan_type") == "Advance" else "Loan"
+        lump = loan_type == "Loan" and data.get("repayment") == LUMP_SUM  # an advance is always recovered from next month's salary
         amount = round(checked_number(data.get("amount"), "loan_invalid"), 0)
-        instalments = 1 if loan_type == "Advance" else int(checked_number(data.get("instalments"), "loan_invalid"))
+        instalments = 1 if loan_type == "Advance" or lump else int(checked_number(data.get("instalments"), "loan_invalid"))
+        due = lump_sum_date(data.get("lump_sum_date"), cfg) if lump else None
         purpose = data.get("purpose", "").strip()[:200]
         if amount <= 0 or not purpose or instalments < 1:
             raise ChangeError("loan_invalid")
@@ -30,9 +32,19 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
             raise ChangeError("loan_instalments")
         limit, outstanding, exceeds = loan_policy(conn, staff, amount, pm_str, cfg)
         conn.execute("""INSERT INTO loan_applications (emp_id, loan_type, amount, instalments, purpose, applied_by, applied_at,
-                                                           policy_limit, outstanding, exceeds_policy) VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                     (own_emp, loan_type, amount, instalments, purpose, user, now, limit, outstanding, 1 if exceeds else 0))
+                                                           policy_limit, outstanding, exceeds_policy, repayment_method, lump_sum_date)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                     (own_emp, loan_type, amount, instalments, purpose, user, now, limit, outstanding, 1 if exceeds else 0,
+                      LUMP_SUM if lump else "Instalments", due.isoformat() if due else None))
         return "loan_applied"
+
+    if path == "/record_loan_repayment":
+        ln, amount, left = record_repayment(conn, data.get("loan_ref"), data.get("amount"), data.get("paid_on"), data.get("note"), user, now)
+        log_decision(conn, "add_loan", ln["emp_id"], None, {"loan_ref": ln["loan_ref"], "repaid": amount, "paid_on": data.get("paid_on")},
+                     f"{ln['emp_id']} {ln['employee_name']}: Rs. {amount:,.0f} of loan {ln['loan_ref']} repaid directly on {data.get('paid_on')}"
+                     + (" — loan fully repaid" if left <= 0 else f"; Rs. {left:,.0f} still to be repaid")
+                     + (f" ({data.get('note', '').strip()[:200]})" if data.get("note", "").strip() else ""), user)
+        return "repayment_saved"
 
     if path == "/export_loans":
         batch, ibft_path, ift_path, paid, skipped = generate_loan_bank_files(conn, user)
@@ -62,8 +74,10 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         approver_only = la["emp_id"] in approver_only_emps(conn)
         if (own_emp and la["emp_id"] == own_emp) or (role == ROLE_REVIEWER and approver_only):
             raise ChangeError("loan_own")
+        repay = (f" repaid in one lump sum by {la['lump_sum_date']}" if la["repayment_method"] == LUMP_SUM
+                 else f" over {la['instalments']} instalments")
         desc = (f"{la['emp_id']} {la['employee_name']}: {la['loan_type']} Rs. {la['amount']:,.0f}"
-                + (f" over {la['instalments']} instalments" if la["loan_type"] == "Loan" else "") + f" — {la['purpose']}")
+                + (repay if la["loan_type"] == "Loan" else "") + f" — {la['purpose']}")
         if path == "/review_loan":
             if la["status"] != "Applied" or decision not in ("Recommended", "Rejected"):
                 raise ChangeError("loan_wrong_stage")
@@ -96,6 +110,7 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
                             loan_ref = ? WHERE id = ?""", (amount, user, now, note, ref, la["id"]))
         log_decision(conn, "add_loan", la["emp_id"], None, {"application": la["id"], "loan_ref": ref, "amount": amount},
                      f"Application #{la['id']} approved as {ref}: Rs. {amount:,.0f}"
-                     + (f", Rs. {instalment:,.0f}/month" if la["loan_type"] == "Loan" else ", recovered in full next month")
+                     + ((f", lump sum due {la['lump_sum_date']}" if la["repayment_method"] == LUMP_SUM else f", Rs. {instalment:,.0f}/month")
+                        if la["loan_type"] == "Loan" else ", recovered in full next month")
                      + (" (EXCEPTION to loan policy)" if la["exceeds_policy"] else "") + f" — {desc}", user)
         return "loan_approved"

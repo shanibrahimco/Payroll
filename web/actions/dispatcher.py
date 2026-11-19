@@ -64,6 +64,7 @@ ACTION_HANDLERS = {
     "/review_loan": loans_actions.handle,
     "/decide_loan": loans_actions.handle,
     "/withdraw_loan": loans_actions.handle,
+    "/record_loan_repayment": loans_actions.handle,
     "/set_travel_rate": travel_actions.handle,
     "/set_rate_uplift": travel_actions.handle,
     "/fetch_fuel_prices": travel_actions.handle,

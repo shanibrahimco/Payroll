@@ -34,21 +34,21 @@ def fetch_fuel_prices(conn, pages=1, url=None):
     Returns the number of new dates added; raises on a network / format problem."""
     import urllib.request
     base = url or get_settings_dict(conn).get("fuel_price_url", "https://psopk.com/fuel-prices/pol/archives?page=1")
-    added = found = 0
-    now = datetime.now().isoformat(timespec="seconds")
-    for page in range(1, pages + 1):
+    rows = []
+    for page in range(1, pages + 1):  # download every page first, so the database is never kept waiting on the website
         page_url = base.split("?")[0] + f"?page={page}"
         req = urllib.request.Request(page_url, headers={"User-Agent": "Mozilla/5.0 (payroll travel-rate update)"})
         with urllib.request.urlopen(req, timeout=20) as resp:
             html = resp.read().decode("utf-8", "replace")
-        rows = parse_pso_prices(html)
-        found += len(rows)
-        for d, price in rows:
-            cur = conn.execute("INSERT OR IGNORE INTO fuel_prices (effective_date, price, source, recorded_by, recorded_at) VALUES (?,?,?,?,?)",
-                               (d, price, "PSO website", "system", now))
-            added += cur.rowcount
-    if not found:
+        rows += parse_pso_prices(html)
+    if not rows:
         raise ValueError(f"No '{FUEL_PRODUCT}' prices found on the PSO page (the page layout may have changed)")
+    now = datetime.now().isoformat(timespec="seconds")
+    added = 0
+    for d, price in rows:
+        cur = conn.execute("INSERT OR IGNORE INTO fuel_prices (effective_date, price, source, recorded_by, recorded_at) VALUES (?,?,?,?,?)",
+                           (d, price, "PSO website", "system", now))
+        added += cur.rowcount
     return added
 
 def petrol_price_on(conn, on_date):

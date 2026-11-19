@@ -33,6 +33,7 @@ ROLE_ACTIONS = {  # POST paths each role may use
     "/add_credit": (ROLE_APPROVER, ROLE_REVIEWER), "/decide_credit": (ROLE_APPROVER,),
     "/apply_credit": ROLES, "/review_credit": (ROLE_APPROVER, ROLE_REVIEWER),  # own application; the reviewer recommends or condones
     "/apply_loan": ROLES, "/withdraw_loan": ROLES,  # own application (every user linked to a staff member)
+    "/record_loan_repayment": (ROLE_APPROVER,),  # loan money paid back directly reduces salary deductions: approver only
     "/review_loan": (ROLE_REVIEWER,), "/decide_loan": (ROLE_APPROVER,),
     "/export_loans": (ROLE_APPROVER, ROLE_REVIEWER, ROLE_PREPARER),  # separate loan IBFT / IFT files for approved loans
     "/review_travel": (ROLE_APPROVER, ROLE_REVIEWER), "/mark_invoiced": (ROLE_APPROVER, ROLE_REVIEWER),

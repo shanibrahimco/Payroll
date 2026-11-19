@@ -484,6 +484,17 @@ CREATE TABLE IF NOT EXISTS loan_applications ( -- staff apply; reviewer recommen
     loan_ref TEXT -- advances_loans record created on approval
 );
 
+CREATE TABLE IF NOT EXISTS loan_repayments ( -- loan money paid back directly (cash or bank), outside the payroll
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    loan_ref TEXT NOT NULL REFERENCES advances_loans(loan_ref),
+    emp_id TEXT NOT NULL REFERENCES staff(emp_id),
+    amount REAL NOT NULL,
+    paid_on TEXT NOT NULL,
+    note TEXT,
+    recorded_by TEXT,
+    recorded_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS holidays ( -- gazetted holidays (Saturday and Sunday are always off)
     holiday_date TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -541,7 +552,7 @@ CREATE TABLE IF NOT EXISTS timesheet_releases (
 """
 
 def get_conn():
-    conn = sqlite3.connect(config.DB_PATH)
+    conn = sqlite3.connect(config.DB_PATH, timeout=30)  # wait up to 30 s for a moment of other work to finish
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
@@ -598,9 +609,14 @@ def init_db():
     if "client_type" not in {r["name"] for r in conn.execute("PRAGMA table_info(sessions)")}:
         conn.execute("ALTER TABLE sessions ADD COLUMN client_type TEXT DEFAULT 'web'")
     loan_cols = {r["name"] for r in conn.execute("PRAGMA table_info(advances_loans)")}
-    for col, col_type in (("disbursed", "INTEGER DEFAULT 1"), ("disbursed_at", "TEXT"), ("disbursed_by", "TEXT"), ("disbursement_batch", "TEXT")):
+    for col, col_type in (("disbursed", "INTEGER DEFAULT 1"), ("disbursed_at", "TEXT"), ("disbursed_by", "TEXT"), ("disbursement_batch", "TEXT"),
+                          ("repayment_method", "TEXT DEFAULT 'Instalments'"), ("lump_sum_due", "TEXT")):
         if col not in loan_cols:
             conn.execute(f"ALTER TABLE advances_loans ADD COLUMN {col} {col_type}")  # loans already on file were paid outside the system
+    application_cols = {r["name"] for r in conn.execute("PRAGMA table_info(loan_applications)")}
+    for col, col_type in (("repayment_method", "TEXT DEFAULT 'Instalments'"), ("lump_sum_date", "TEXT")):  # Instalments, or Lump sum by a committed date
+        if col not in application_cols:
+            conn.execute(f"ALTER TABLE loan_applications ADD COLUMN {col} {col_type}")
     travel_cols = {r["name"] for r in conn.execute("PRAGMA table_info(travel_claims)")}
     for col, col_type in (("status", "TEXT DEFAULT 'Submitted'"), ("chargeable", "INTEGER DEFAULT 0"), ("submitted_by", "TEXT"),
                           ("reviewed_by", "TEXT"), ("reviewed_at", "TEXT"), ("review_note", "TEXT"), ("invoiced", "INTEGER DEFAULT 0"),

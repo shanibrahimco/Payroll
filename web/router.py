@@ -305,7 +305,7 @@ class RouterMixin:
                     "/send_logins": "email", "/set_app_url": "email", "/set_approver_email": "email",
                     "/add_holiday": "holidays", "/delete_holiday": "holidays", "/email_holidays": "holidays",
                     "/add_credit": "leaves", "/decide_credit": "leaves", "/apply_credit": "leaves", "/review_credit": "leaves",
-                    "/apply_loan": "loans", "/withdraw_loan": "loans", "/review_loan": "loans", "/decide_loan": "loans", "/export_loans": "loans",
+                    "/apply_loan": "loans", "/withdraw_loan": "loans", "/review_loan": "loans", "/decide_loan": "loans", "/export_loans": "loans", "/record_loan_repayment": "loans",
                     "/save_timesheet": "timesheets", "/decide_timesheet": "timesheets", "/save_ts_code": "timesheets", "/set_ts_access": "timesheets",
                     "/review_travel": "travel", "/withdraw_travel": "travel", "/mark_invoiced": "travel",
                     "/fetch_fuel_prices": "travel", "/add_fuel_price": "travel", "/set_rate_uplift": "travel",

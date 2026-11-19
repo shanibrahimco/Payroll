@@ -33,7 +33,7 @@ from common.errors import ChangeError
 from common.messages import FLASH_MESSAGES
 from common.settings import get_settings_dict, is_month_locked
 from database import get_conn
-from loans.rules import loan_balance
+from loans.rules import loan_balance, loan_repaid
 from payroll.calculator import held_balance, recalc_open_months
 from travel.claims import TRAVEL_MODES
 from travel.fuel import petrol_price_on, travel_rate_on
@@ -278,11 +278,14 @@ class ApiMixin:
                 as_of = parse_date(current_month)
                 active = []
                 for ln in rows("SELECT * FROM advances_loans WHERE emp_id = ? ORDER BY date_given DESC", emp_id):
-                    ln["balance"] = loan_balance(ln, as_of)
+                    ln["repaid_directly"] = loan_repaid(conn, ln["loan_ref"])
+                    ln["balance"] = loan_balance(ln, as_of, ln["repaid_directly"])
                     if ln["balance"] > 0:
                         active.append(ln)
                 return self.api_reply(data={"applications": rows("SELECT * FROM loan_applications WHERE emp_id = ? ORDER BY id DESC", emp_id),
-                                            "active_loans": active, **api_loan_limits(conn, staff, current_month, cfg)})
+                                            "active_loans": active, "repayment_methods": ["Instalments", "Lump sum"],
+                                            "repayments": rows("SELECT loan_ref, amount, paid_on, note FROM loan_repayments WHERE emp_id = ? ORDER BY paid_on DESC", emp_id),
+                                            **api_loan_limits(conn, staff, current_month, cfg)})
 
             _, pm_str = api_month(qs)  # /api/payslip
             run = conn.execute("SELECT status FROM payroll_runs WHERE payroll_month = ?", (pm_str,)).fetchone()

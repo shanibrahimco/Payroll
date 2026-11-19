@@ -216,20 +216,27 @@ def calculate_payroll(payroll_month_str):
         # 6. Loan & Advance Recovery
         loans = conn.execute("SELECT * FROM advances_loans WHERE emp_id = ?", (emp_id,)).fetchall()
         loan_recovery = 0.0
+        loan_notes = []
         for ln in loans:
             amt = float(ln["amount"])
             inst = amt if ln["loan_type"] == "Advance" else float(ln["monthly_instalment"] or 0)
             first_rec = parse_date(ln["first_recovery_month"])
             hold_prior = int(ln["months_on_hold_prior"] or 0)
             hold_now = int(ln["hold_this_month"] or 0)
+            # money paid back directly by the end of this month reduces what is left to recover from salary
+            repaid = float(conn.execute("SELECT COALESCE(SUM(amount), 0) FROM loan_repayments WHERE loan_ref = ? AND paid_on <= ?",
+                                        (ln["loan_ref"], fmt_date(month_end))).fetchone()[0])
 
             if not first_rec or pay_month < first_rec or hold_now == 1:
                 rec_this = 0.0
             else:
                 months_elapsed = max(0, (pay_month.year - first_rec.year) * 12 + (pay_month.month - first_rec.month))
                 recovered_before = min(amt, inst * max(0, months_elapsed - hold_prior))
-                rec_this = min(inst, max(0.0, amt - recovered_before))
+                rec_this = min(inst, max(0.0, amt - recovered_before - repaid))
             loan_recovery += rec_this
+            # a lump-sum loan is never deducted from salary; once its committed date passes unpaid, the payroll says so
+            if ln["repayment_method"] == "Lump sum" and ln["lump_sum_due"] and ln["lump_sum_due"] <= fmt_date(month_end) and amt - repaid > 0:
+                loan_notes.append(f"Loan {ln['loan_ref']}: lump sum of Rs. {amt - repaid:,.0f} was due on {ln['lump_sum_due']} and is not repaid.")
 
         # 7. Pay Held, Income Tax (Rs. 0), & Net Pay (loan instalments are still recovered from pay that is being held)
         payable_pay = max(0.0, gross_earned - leave_ded - late_arr - partial_client - loan_recovery)
@@ -399,6 +406,7 @@ def calculate_payroll(payroll_month_str):
         cnic_warn = cnic_alert(s["cnic_expiry"], month_end)
         if on_payroll and cnic_warn.startswith("CNIC expired"):
             checks.append(cnic_warn + ".")
+        checks.extend(loan_notes)
         if leave_encash > 0:
             checks.append(f"Leave encashment: {encash_days:g} unused day(s) above the {float(cfg.get('leave_bank_max', 40)):g}-day bank.")
         if eobi_only:  # no salary, bank account or leave to check

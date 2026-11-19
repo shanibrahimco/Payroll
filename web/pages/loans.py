@@ -1,12 +1,14 @@
 """The loans tab of the web app."""
 
+from datetime import date
 import html as html_lib
 import json
 
 from auth.roles import ROLE_ACTIONS, ROLE_APPROVER, ROLE_PREPARER, ROLE_REVIEWER
 from common.constants import EOBI_ONLY_TYPE
+from common.dates import add_months, first_of_month
 from common.settings import get_settings_dict
-from loans.rules import loan_outstanding
+from loans.rules import LUMP_SUM, loan_balance, loan_outstanding, loan_repaid
 from payroll.bank_files import loans_to_disburse
 from payroll.calculator import effective_salary
 
@@ -17,17 +19,60 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
     max_sal, max_inst = float(cfg.get("loan_max_salaries", 2)), int(float(cfg.get("loan_max_instalments", 20)))
     lns = conn.execute("""SELECT a.*, s.employee_name FROM advances_loans a JOIN staff s ON a.emp_id=s.emp_id
                                   WHERE ? IS NULL OR a.emp_id = ? ORDER BY a.loan_ref""", (only_emp, only_emp)).fetchall()
+    this_month, today = first_of_month(date.today()), date.today().isoformat()
+    repaid = {l["loan_ref"]: loan_repaid(conn, l["loan_ref"]) for l in lns}
+    balance = {l["loan_ref"]: loan_balance(l, this_month, repaid[l["loan_ref"]]) for l in lns}
+
+    def repayment_cell(l):
+        if l["repayment_method"] == LUMP_SUM:
+            overdue = l["lump_sum_due"] and l["lump_sum_due"] < today and balance[l["loan_ref"]] > 0
+            return (f"Lump sum by {esc(l['lump_sum_due'] or '')}"
+                    + (" <span class='badge b-warn'>Overdue</span>" if overdue else ""))
+        return f"{l['monthly_instalment']:,.0f}"
+
+    def balance_cell(l):
+        left = balance[l["loan_ref"]]
+        return "<span class='badge b-ok'>Repaid</span>" if left <= 0 else f"{left:,.0f}"
+
     rows_html = "".join(f"""
                 <tr>
                   <td>{l['loan_ref']}</td><td>{l['emp_id']}</td><td>{esc(l['employee_name'])}</td>
                   <td>{l['loan_type']}</td><td>{l['date_given']}</td><td class="num">{l['amount']:,.0f}</td>
-                  <td class="num">{l['monthly_instalment']:,.0f}</td><td>{l['first_recovery_month']}</td>
-                  <td>{'Yes' if l['hold_this_month'] else 'No'}</td><td>{esc(l['purpose'] or '')}</td><td>{esc(l['remarks'] or '')}</td>
+                  <td class="num">{repayment_cell(l)}</td><td>{l['first_recovery_month']}</td>
+                  <td>{'Yes' if l['hold_this_month'] else 'No'}</td><td class="num">{repaid[l['loan_ref']]:,.0f}</td><td class="num">{balance_cell(l)}</td>
+                  <td>{esc(l['purpose'] or '')}</td><td>{esc(l['remarks'] or '')}</td>
                   <td>{"<span class='badge b-warn'>Awaiting payment</span>" if not l['disbursed'] else
                        f"<span class='badge b-ok'>Paid {(l['disbursed_at'] or '')[:10]}</span><br><span class='note'>{l['disbursement_batch']}</span>" if l['disbursement_batch'] else "Paid"}</td>
                 </tr>""" for l in lns)
-    loans_head = ("<thead><tr><th>Ref</th><th>ID</th><th>Name</th><th>Type</th><th>Date</th><th class='num'>Amount</th><th class='num'>Instalment</th>"
-                  "<th>1st Rec.</th><th>Hold?</th><th>Purpose</th><th>Remarks</th><th>Paid</th></tr></thead>")
+    loans_head = ("<thead><tr><th>Ref</th><th>ID</th><th>Name</th><th>Type</th><th>Date</th><th class='num'>Amount</th><th class='num'>Instalment / Lump Sum</th>"
+                  "<th>1st Rec.</th><th>Hold?</th><th class='num'>Repaid Directly</th><th class='num'>Balance</th><th>Purpose</th><th>Remarks</th><th>Paid</th></tr></thead>")
+
+    repayments = conn.execute("""SELECT r.*, s.employee_name FROM loan_repayments r JOIN staff s ON s.emp_id = r.emp_id
+                                 WHERE ? IS NULL OR r.emp_id = ? ORDER BY r.paid_on DESC, r.id DESC""", (only_emp, only_emp)).fetchall()
+    repay_rows = "".join(f"<tr><td>{esc(r['paid_on'])}</td><td>{esc(r['loan_ref'])}</td><td>{r['emp_id']} {esc(r['employee_name'])}</td>"
+                         f"<td class='num'>{r['amount']:,.0f}</td><td>{esc(r['note'] or '')}</td><td>{esc(r['recorded_by'] or '')}</td></tr>" for r in repayments)
+    repay_form = ""
+    if role in ROLE_ACTIONS["/record_loan_repayment"]:
+        open_loans = [l for l in lns if balance[l["loan_ref"]] > 0]
+        options = "".join(f"<option value='{esc(l['loan_ref'], quote=True)}'>{esc(l['loan_ref'])} — {l['emp_id']} {esc(l['employee_name'])} "
+                          f"(balance Rs. {balance[l['loan_ref']]:,.0f})</option>" for l in open_loans)
+        repay_form = f"""
+              <form class="inline" method="POST" action="/record_loan_repayment?ym={ym}">
+                <label>Loan <select name="loan_ref" required>{options}</select></label>
+                <label>Amount Repaid (Rs.) <input type="number" name="amount" min="1" required style="width:110px;"></label>
+                <label>Date Paid <input type="date" name="paid_on" max="{today}" required></label>
+                <label>Note <input name="note" size="24" placeholder="e.g. Cash, receipt no."></label>
+                <button class="btn" type="submit"{'' if open_loans else ' disabled'}>Record Repayment</button>
+              </form>"""
+    repay_panel = f"""
+            <div class="panel">
+              <h3>{'My Loan Repayments' if is_staff else 'Loan Repayments Made Directly'}</h3>
+              <p class="note">Money paid back by cash or bank transfer, outside the payroll. It reduces the balance, and salary deductions
+                stop once the loan is repaid. Only the approver records repayments.</p>
+              {repay_form}
+              <table><thead><tr><th>Date Paid</th><th>Loan</th><th>Staff</th><th class="num">Amount</th><th>Note</th><th>Recorded By</th></tr></thead>
+                <tbody>{repay_rows or "<tr><td colspan='6'>No direct repayments yet.</td></tr>"}</tbody></table>
+            </div>"""
     pay_panel = ""
     if role in ROLE_ACTIONS["/export_loans"]:
         waiting = loans_to_disburse(conn)
@@ -106,7 +151,7 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
     app_rows = "".join(f"""
                 <tr><td>#{a['id']}</td><td>{a['applied_at'][:10]}</td><td>{a['emp_id']} {esc(a['employee_name'])}</td><td>{a['loan_type']}</td>
                   <td class="num"><strong>{a['amount']:,.0f}</strong></td>
-                  <td class="num">{a['instalments'] if a['loan_type'] == 'Loan' else '1 (next month)'}</td>
+                  <td class="num">{('Lump sum by ' + esc(a['lump_sum_date'] or '')) if a['loan_type'] == 'Loan' and a['repayment_method'] == LUMP_SUM else a['instalments'] if a['loan_type'] == 'Loan' else '1 (next month)'}</td>
                   <td>{esc(a['purpose'] or '')}</td><td>{policy_cell(a)}</td><td>{app_status(a)}</td><td>{app_action(a)}</td></tr>""" for a in apps)
 
     apply_panel = ""
@@ -120,13 +165,16 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
               <h3>Apply for a Loan or Advance</h3>
               <p class="note">Policy: loans and advances outstanding may not exceed <b>{max_sal:g} months' salary</b> (your limit:
                 <b>Rs. {my_limit:,.0f}</b>; already outstanding or applied for: <b>Rs. {my_out:,.0f}</b>; available:
-                <b>Rs. {max(0, my_limit - my_out):,.0f}</b>). A loan is repaid in at most <b>{max_inst} monthly instalments</b>; an advance is
-                recovered in full from next month's salary. Every application is reviewed by the reviewer and approved by the approver.
+                <b>Rs. {max(0, my_limit - my_out):,.0f}</b>). A loan is repaid either in at most <b>{max_inst} monthly instalments</b> from
+                salary, or in <b>one lump sum</b> by a date you commit to (within {max_inst} months; nothing is deducted from salary meanwhile).
+                An advance is recovered in full from next month's salary. Every application is reviewed by the reviewer and approved by the approver.
                 An amount above the limit is possible only if the reviewer recommends it as an exception and the approver approves it.</p>
               <form class="inline" method="POST" action="/apply_loan?ym={ym}">
                 <label>Type <select name="loan_type"><option>Loan</option><option>Advance</option></select></label>
                 <label>Amount (Rs.) <input type="number" name="amount" min="1" required style="width:110px;"></label>
-                <label>Instalments (loan) <input type="number" name="instalments" min="1" max="{max_inst}" value="{max_inst}" style="width:80px;"></label>
+                <label>Repayment (loan) <select name="repayment"><option value="Instalments">Monthly instalments</option><option value="{LUMP_SUM}">Lump sum by a date</option></select></label>
+                <label>Instalments (if monthly) <input type="number" name="instalments" min="1" max="{max_inst}" value="{max_inst}" style="width:80px;"></label>
+                <label>Lump sum date (if lump sum) <input type="date" name="lump_sum_date" min="{date.today().isoformat()}" max="{add_months(date.today(), max_inst).isoformat()}"></label>
                 <label>Purpose <input name="purpose" required size="30" placeholder="Reason for the loan"></label>
                 <button class="btn" type="submit">Apply</button>
               </form>
@@ -143,13 +191,13 @@ def render(self, approver_only, cannot_decide, conn, is_approver, is_staff, own_
               <h3>{'My Loans &amp; Advances' if is_staff else 'Loans &amp; Advances'}</h3>
               <table>
                 {loans_head}
-                <tbody>{rows_html or "<tr><td colspan='12'>None.</td></tr>"}</tbody>
+                <tbody>{rows_html or "<tr><td colspan='14'>None.</td></tr>"}</tbody>
               </table>
             </div>"""
     if is_staff:
-        body = apply_panel + apps_panel + loans_table
+        body = apply_panel + apps_panel + loans_table + repay_panel
     else:
-        body = apply_panel + apps_panel + pay_panel + f"""
+        body = apply_panel + apps_panel + pay_panel + repay_panel + f"""
             <div class="panel">
               <h3>Add / Update Advance or Loan Directly (e.g. earlier loans)</h3>
               <p class="note">{'Saved immediately and recorded in the approval log.' if is_approver else '<b>Sent to the approver; recovery starts only after approval.</b>' if role == ROLE_PREPARER else '<b>View only.</b>'}
