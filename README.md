@@ -2,20 +2,37 @@
 
 ## Quick Start in VS Code
 1. Extract this ZIP folder and open the folder **`Shan_Ibrahim_Payroll_VSCode`** in **VS Code** (`File > Open Folder...`).
-2. Open **`sic_payroll_app.py`** and press **`F5`** (or click the **Run Python File** ▶ button at the top right).
+2. Open **`app.py`** and press **`F5`** (or click the **Run Python File** ▶ button at the top right).
 3. Open your browser to **`http://127.0.0.1:8080`**.
+
+## Project structure
+
+| Location | What it holds |
+|---|---|
+| `app.py` | Starts the server |
+| `config.py` | Company settings, ports and folders |
+| `database.py` | Database tables, connection and upgrades |
+| `payroll/` | Salary calculation, bank files, change approvals, final sheet import |
+| `attendance/` | Mobile check-in, approved locations, office timings, absences |
+| `leaves/`, `travel/`, `loans/`, `timesheets/`, `staff/` | The rules for each area |
+| `auth/` | Roles, logins, sessions and the login limit |
+| `notifications/` | Emails |
+| `common/` | Dates, messages, settings and fixed values used everywhere |
+| `web/` | Web app: `router.py`, one file per tab in `pages/`, form handling in `actions/` |
+| `api/` | Mobile app API (`/api/*`) |
+| `tests/` | Automated checks: `python tests/test_app.py` (runs on a temporary copy of the data) |
 
 ## Companies
 Each company has its own database, users, exports folder and port. One firm's staff and payroll are never visible to the other.
 
 | Company | Start with | Address | Database |
 |---|---|---|---|
-| Shan Ibrahim & Co. Chartered Accountants | `python sic_payroll_app.py` | `http://127.0.0.1:8080` | `sic_payroll.db` |
-| Elite Financial Consultants Cost & Management Accountants | `python sic_payroll_app.py --company elite` | `http://127.0.0.1:8081` | `companies/elite/payroll.db` |
+| Shan Ibrahim & Co. Chartered Accountants | `python app.py` | `http://127.0.0.1:8080` | `sic_payroll.db` |
+| Elite Financial Consultants Cost & Management Accountants | `python app.py --company elite` | `http://127.0.0.1:8081` | `companies/elite/payroll.db` |
 
 In VS Code, pick the company from the Run and Debug drop-down (**Run SIC Payroll System** / **Run Elite Financial Consultants Payroll**).
 A new company's first visit opens the one-time setup page, where its own administrator (Approver) account is created.
-To add another company, add an entry to `COMPANIES` at the top of `sic_payroll_app.py`.
+To add another company, add an entry to `COMPANIES` in `config.py`.
 
 ## Approval Controls
 - **Roles:** the first account created is the **Approver**. The Approver adds other users on the Users tab:
