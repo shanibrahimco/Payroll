@@ -58,10 +58,28 @@ def render(self, account, conn, role, user, ym, body=""):
     names = {p["emp_id"]: p["employee_name"] for p in people}
     log_rows = "".join(f"""
                 <tr><td>{l['sent_at'][:16].replace('T', ' ')}</td><td>{esc(l['sent_by'])}</td><td>{esc(l['from_address'] or '')}</td>
-                  <td>{esc(l['to_address'] or '')}{f" ({esc(names.get(l['emp_id'], l['emp_id']))})" if l['emp_id'] else ''}</td><td>{l['purpose']}</td>
+                  <td>{esc(l['to_address'] or '')}{f" ({esc(names.get(l['emp_id'], l['emp_id']))})" if l['emp_id'] else ''}</td><td>{esc(l['purpose'] or '')}</td>
                   <td><span class='badge {'b-ok' if l['status'] == 'Sent' else 'b-warn'}'>{l['status']}</span></td>
                   <td style="white-space:normal; max-width:360px;">{esc(l['error'] or '')}</td></tr>""" for l in log)
     preview = login_email_text("<Name>", "<CNIC without dashes>", "<Starting password>", app_url)
+    general_panel = ""
+    if role in ROLE_ACTIONS["/email_all_staff"]:
+        reach = [p for p in people if p["email"]]
+        missing = [p for p in people if not p["email"]]
+        general_panel = f"""
+            <div class="panel">
+              <h3>Email All Staff</h3>
+              <p class="note">Sends a general email from <b>your own sending account</b> to every active staff member with an email address
+                (<b>{len(reach)}</b> people). Each person gets their own email starting "Dear &lt;name&gt;," and ending with your name and the
+                firm's name, so nobody sees anyone else's address. Every email is recorded in the Email Log below.
+                {f"<br><span class='badge b-warn'>No email address, so they won't receive it:</span> {esc(', '.join(p['emp_id'] + ' ' + p['employee_name'] for p in missing))}" if missing else ""}</p>
+              <form method="POST" action="/email_all_staff?ym={ym}" onsubmit="return confirm('Send this email to {len(reach)} staff members?');">
+                <label style="margin-bottom:8px;">Subject <input name="subject" required maxlength="150" style="width:100%; max-width:640px;"></label>
+                <label style="margin-bottom:8px;">Message <textarea name="message" required maxlength="5000" rows="8" style="width:100%; max-width:640px; font:inherit; padding:8px;"></textarea></label>
+                <button class="btn btn-ok" type="submit"{'' if account and reach else ' disabled'}>Send to All Staff ({len(reach)})</button>
+                {"" if account else "<span class='note'>&nbsp; Set up your sending email account first.</span>"}
+              </form>
+            </div>"""
 
     body = f"""
             <div class="panel">
@@ -121,6 +139,7 @@ def render(self, account, conn, role, user, ym, body=""):
                 <tbody>{people_rows}</tbody>
               </table>
             </div>
+            {general_panel}
             <div class="panel">
               <h3>Email Log</h3>
               <table>

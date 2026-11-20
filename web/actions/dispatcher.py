@@ -78,6 +78,7 @@ ACTION_HANDLERS = {
     "/save_ts_code": timesheets_actions.handle,
     "/decide_timesheet": timesheets_actions.handle,
     "/set_approver_email": mail_actions.handle,
+    "/email_all_staff": mail_actions.handle,
     "/upload_emails": mail_actions.handle,
     "/set_email": mail_actions.handle,
     "/save_mail_account": mail_actions.handle,

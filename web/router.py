@@ -302,7 +302,7 @@ class RouterMixin:
             data["emp_id"] = emp_param
 
         next_tab = {"/upload_emails": "email", "/set_email": "email", "/save_mail_account": "email", "/send_test_email": "email",
-                    "/send_logins": "email", "/set_app_url": "email", "/set_approver_email": "email",
+                    "/send_logins": "email", "/set_app_url": "email", "/set_approver_email": "email", "/email_all_staff": "email",
                     "/add_holiday": "holidays", "/delete_holiday": "holidays", "/email_holidays": "holidays",
                     "/add_credit": "leaves", "/decide_credit": "leaves", "/apply_credit": "leaves", "/review_credit": "leaves",
                     "/apply_loan": "loans", "/withdraw_loan": "loans", "/review_loan": "loans", "/decide_loan": "loans", "/export_loans": "loans", "/record_loan_repayment": "loans",

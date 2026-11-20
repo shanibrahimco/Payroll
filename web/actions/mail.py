@@ -9,6 +9,7 @@ from common.errors import ChangeError
 from common.settings import log_decision
 from notifications.mailer import (
     MAIL_SECURITY,
+    email_all_staff,
     import_staff_emails,
     login_email_text,
     read_email_list,
@@ -25,6 +26,18 @@ def handle(self, conn, path, data, ym, pm_str, user, role, own_emp, cfg, cutoff,
         conn.execute("INSERT OR REPLACE INTO settings (key, value, description) VALUES ('approver_notify_email', ?, 'Approver is emailed here when something awaits approval')",
                      (addr,))
         return "approver_email_saved"
+
+    if path == "/email_all_staff":
+        subject = " ".join(data.get("subject", "").split())[:150]
+        message = data.get("message", "").replace("\r\n", "\n").strip()[:5000]
+        if not subject or not message:
+            raise ChangeError("general_email_invalid")
+        outcome, _count = email_all_staff(conn, user, now, subject, message)
+        if outcome == "no_account":
+            raise ChangeError("mail_no_account")
+        if outcome == "no_staff":
+            raise ChangeError("general_email_none")
+        return {"sent": "general_email_sent", "partly": "general_email_partly", "failed": "mail_failed"}[outcome]
 
     if path == "/upload_emails":
         upload = self.files.get("email_list")

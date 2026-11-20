@@ -28,6 +28,7 @@ ROLE_ACTIONS = {  # POST paths each role may use
     "/save_mail_account": (ROLE_APPROVER, ROLE_REVIEWER, ROLE_PREPARER), "/send_test_email": (ROLE_APPROVER, ROLE_REVIEWER, ROLE_PREPARER),
     "/send_logins": (ROLE_APPROVER, ROLE_REVIEWER, ROLE_PREPARER), "/set_app_url": (ROLE_APPROVER, ROLE_REVIEWER, ROLE_PREPARER),
     "/set_approver_email": (ROLE_APPROVER, ROLE_REVIEWER),
+    "/email_all_staff": (ROLE_APPROVER, ROLE_REVIEWER),  # a general email to every staff member
     "/add_holiday": (ROLE_APPROVER, ROLE_REVIEWER), "/delete_holiday": (ROLE_APPROVER, ROLE_REVIEWER),
     "/email_holidays": (ROLE_APPROVER, ROLE_REVIEWER),
     "/add_credit": (ROLE_APPROVER, ROLE_REVIEWER), "/decide_credit": (ROLE_APPROVER,),

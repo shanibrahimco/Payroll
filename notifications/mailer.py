@@ -152,3 +152,23 @@ def email_holiday_notice(conn, user, now, headline=""):
         conn.execute("INSERT INTO email_log (sent_at, sent_by, from_address, to_address, emp_id, purpose, status, error) VALUES (?,?,?,?,?,?,?,?)",
                      (now, user, account["from_address"], r["email"], r["emp_id"], "Holiday list", "Failed" if err else "Sent", err))
     return "sent" if not failed else ("failed" if failed == len(recipients) else "partly")
+
+def email_all_staff(conn, user, now, subject, message):
+    """Send one general email to every active staff member with an email address, each as their own message from the
+    user's own account. Returns (outcome, number of people): outcome is 'sent', 'partly', 'failed', 'no_account' or 'no_staff'."""
+    account = conn.execute("SELECT * FROM mail_accounts WHERE username = ?", (user,)).fetchone()
+    if account is None:
+        return "no_account", 0
+    recipients = conn.execute("""SELECT emp_id, employee_name, email FROM staff WHERE status = 'Active' AND COALESCE(email, '') != ''
+                                 AND COALESCE(staff_type, '') != ? ORDER BY emp_id""", (EOBI_ONLY_TYPE,)).fetchall()
+    if not recipients:
+        return "no_staff", 0
+    signature = f"\n\nRegards,\n{account['from_name'] or user}\n{config.FIRM_NAME}\n"
+    results = dict(send_emails(account, [(r["email"], subject, f"Dear {r['employee_name']},\n\n{message}{signature}") for r in recipients]))
+    failed = 0
+    for r in recipients:
+        err = results.get(r["email"])
+        failed += err is not None
+        conn.execute("INSERT INTO email_log (sent_at, sent_by, from_address, to_address, emp_id, purpose, status, error) VALUES (?,?,?,?,?,?,?,?)",
+                     (now, user, account["from_address"], r["email"], r["emp_id"], "General email", "Failed" if err else "Sent", err))
+    return ("sent" if not failed else "failed" if failed == len(recipients) else "partly"), len(recipients)
